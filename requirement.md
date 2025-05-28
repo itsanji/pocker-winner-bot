@@ -1,0 +1,11 @@
+-   A pocker manager bot, that can be used to save and calculate the amount of money in the poker game.
+-   Bot will connect to a Rocket chat server and listen to the messages.
+-   Rocket chat login method is username and password.
+-   Message is "!po 400 5 Tuyen"
+-   "!po" is bot trigger message
+-   "400" is amount of start money
+-   "5" is amount of player
+-   "Tuyen" is the name of the player
+-   Bot will save the message to google sheet using google sheet api.
+-   Each match will be a row in the google sheet.
+-   Each day will be a sheet in the google sheet file

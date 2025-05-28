@@ -1,0 +1,4 @@
+env
+logs
+.env
+service-account.json
