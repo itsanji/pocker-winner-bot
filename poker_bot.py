@@ -189,11 +189,11 @@ class PokerBot:
         if not match:
             return None
             
-        start_money = float(match.group(1))
+        buy_in = float(match.group(1))      # Changed variable name to buy_in
         num_players = int(match.group(2))
-        player_name = match.group(3)
+        winner_name = match.group(3)         # Changed variable name to winner_name
         
-        return start_money, num_players, player_name
+        return buy_in, num_players, winner_name
     
     def _init_google_sheets(self):
         """Initialize Google Sheets API service with service account"""
@@ -255,7 +255,7 @@ class PokerBot:
                                 'title': today,
                                 'gridProperties': {
                                     'rowCount': 1000,
-                                    'columnCount': 5
+                                    'columnCount': 7  # Increased for new columns
                                 }
                             }
                         }
@@ -270,10 +270,10 @@ class PokerBot:
                 # Add headers
                 self.sheets_service.spreadsheets().values().update(
                     spreadsheetId=self.spreadsheet_id,
-                    range=f'{today}!A1:E1',
+                    range=f'{today}!A1:G1',
                     valueInputOption='RAW',
                     body={
-                        'values': [['Timestamp', 'Start Money', 'Number of Players', 'Player Name', 'Status']]
+                        'values': [['No.', 'Winner', 'Players', 'Buy-in', 'Total Pool', 'Losers', 'Lost Amount']]
                     }
                 ).execute()
                 
@@ -289,24 +289,47 @@ class PokerBot:
             
         return today
 
-    def save_game(self, start_money: float, num_players: int, player_name: str):
+    def save_game(self, buy_in: float, num_players: int, winner_name: str):
         """Save game information to Google Sheets"""
         sheet_name = self.get_or_create_today_sheet()
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         try:
+            # Get current row count to determine the next number
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=self.spreadsheet_id,
+                range=f'{sheet_name}!A:A'
+            ).execute()
+            
+            # Calculate the next number (excluding header row)
+            next_number = len(result.get('values', [])) if 'values' in result else 1
+            
+            # Calculate total pool
+            total_pool = buy_in * num_players
+            
+            # Format winner name in uppercase
+            winner_name = winner_name.upper()
+            
             # Append new row
             result = self.sheets_service.spreadsheets().values().append(
                 spreadsheetId=self.spreadsheet_id,
-                range=f'{sheet_name}!A:E',
+                range=f'{sheet_name}!A:G',
                 valueInputOption='RAW',
                 insertDataOption='INSERT_ROWS',
                 body={
-                    'values': [[timestamp, start_money, num_players, player_name, 'Active']]
+                    'values': [[
+                        next_number,          # No.
+                        winner_name,          # Winner
+                        num_players,          # Players
+                        buy_in,              # Buy-in
+                        total_pool,          # Total Pool
+                        "",                  # Losers (to be filled manually)
+                        ""                   # Lost Amount (to be filled manually)
+                    ]]
                 }
             ).execute()
             
-            self.logger.info(f"Successfully recorded game: {player_name}, {num_players} players, ${start_money}")
+            self.logger.info(f"Successfully recorded game: Winner {winner_name}, {num_players} players, ${buy_in} buy-in, total pool ${total_pool}")
+            return f"Game recorded: {winner_name} won! 🏆\nBuy-in: ${buy_in}\nPlayers: {num_players}\nTotal Pool: ${total_pool}"
             
         except HttpError as e:
             error_details = json.loads(e.content.decode('utf-8'))
@@ -334,10 +357,10 @@ class PokerBot:
         # Send immediate acknowledgment
         self.send_message("Processing your poker command... 🎲")
             
-        start_money, num_players, player_name = parsed
+        buy_in, num_players, winner_name = parsed
         try:
-            self.save_game(start_money, num_players, player_name)
-            return f"Game recorded: {player_name} started a game with {num_players} players and ${start_money} starting money"
+            self.save_game(buy_in, num_players, winner_name)
+            return f"Game recorded: {winner_name} won! 🏆\nBuy-in: ${buy_in}\nPlayers: {num_players}\nTotal Pool: ${buy_in * num_players}"
         except Exception as e:
             error_msg = f"Error recording game: {str(e)}"
             self.logger.error(error_msg)
@@ -351,14 +374,22 @@ class PokerBot:
                hasattr(self, 'last_message_content') and \
                current_time - self.last_message_time < 1 and \
                self.last_message_content == message:
+                self.logger.debug("Skipping duplicate message send")
                 return
 
-            self.rocket.chat_post_message(message, channel=self.room_id)
-            self.last_message_time = current_time
-            self.last_message_content = message
+            self.logger.info(f"Attempting to send message: {message}")
+            response = self.rocket.chat_post_message(message, channel=self.room_id)
+            
+            if response.ok:
+                self.logger.info("Message sent successfully")
+                self.last_message_time = current_time
+                self.last_message_content = message
+            else:
+                self.logger.error(f"Failed to send message. Status code: {response.status_code}")
+                self.logger.error(f"Response content: {response.text}")
             
         except Exception as e:
-            self.logger.error(f"Message error: {str(e)}")
+            self.logger.error(f"Error sending message: {str(e)}", exc_info=True)
 
     def send_login(self):
         """Send login request"""
@@ -389,14 +420,37 @@ class PokerBot:
                     self.room_id,
                     {
                         "useCollection": False,
-                        "args": []
+                        "args": [
+                            {"$or": [{"t": {"$exists": False}}, {"t": ""}]},
+                            {"$or": [{"t": "p"}, {"t": "c"}]},
+                            {"roomParticipant": True},
+                            {"roomType": {"$ne": "d"}}
+                        ]
                     }
                 ]
             }
             self.ws.send(json.dumps(sub_msg))
-            
+            self.logger.info(f"Sent subscription request for room: {self.room_name} (ID: {self.room_id})")
         except Exception as e:
-            self.logger.error(f"Subscription error: {str(e)}")
+            self.logger.error(f"Error subscribing to room: {str(e)}")
+            # Try simpler subscription without args
+            try:
+                simple_sub_msg = {
+                    "msg": "sub",
+                    "id": str(uuid.uuid4()),
+                    "name": "stream-room-messages",
+                    "params": [
+                        self.room_id,
+                        {
+                            "useCollection": False,
+                            "args": []
+                        }
+                    ]
+                }
+                self.ws.send(json.dumps(simple_sub_msg))
+                self.logger.info("Sent simplified subscription request")
+            except Exception as e:
+                self.logger.error(f"Error sending simplified subscription: {str(e)}")
 
     def on_message(self, ws, message):
         """Handle incoming WebSocket messages"""
@@ -415,6 +469,7 @@ class PokerBot:
                 return
                 
             msg_type = data.get('msg')
+            self.logger.debug(f"Received message type: {msg_type}")
             
             # Handle different message types
             if msg_type == 'connected':
@@ -439,6 +494,7 @@ class PokerBot:
                 
             elif msg_type == 'changed' and data.get('collection') == 'stream-room-messages':
                 if not self.is_logged_in or not self.is_subscribed:
+                    self.logger.warning("Not processing message - not logged in or subscribed")
                     return
                     
                 # Extract the message content
@@ -447,8 +503,11 @@ class PokerBot:
                 msg_id = message_data.get('_id', '')
                 sender_username = message_data.get('u', {}).get('username')
                 
+                self.logger.info(f"Received message - ID: {msg_id}, From: {sender_username}, Content: {msg_content}")
+                
                 # Skip if we've already processed this message
                 if msg_id in self.processed_messages:
+                    self.logger.debug(f"Skipping already processed message: {msg_id}")
                     return
                     
                 # Add message ID to processed set
@@ -460,15 +519,20 @@ class PokerBot:
                 
                 # Only process command messages
                 if msg_content.startswith('!'):
-                    self.logger.info(f"Command from {sender_username}: {msg_content}")
+                    self.logger.info(f"Processing command from {sender_username}: {msg_content}")
                     response = self.process_message(msg_content)
                     if response:
+                        self.logger.info(f"Sending response: {response}")
                         self.send_message(response)
+                    else:
+                        self.logger.warning(f"No response generated for command: {msg_content}")
+                else:
+                    self.logger.debug(f"Ignoring non-command message: {msg_content}")
                         
         except json.JSONDecodeError:
-            pass
+            self.logger.warning(f"Received invalid JSON message: {message}")
         except Exception as e:
-            self.logger.error(f"Error: {str(e)}")
+            self.logger.error(f"Error processing message: {str(e)}", exc_info=True)
 
     def connect_websocket(self):
         """Establish WebSocket connection"""
