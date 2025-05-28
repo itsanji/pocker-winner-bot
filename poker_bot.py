@@ -349,10 +349,31 @@ class PokerBot:
         if message.strip() == '!ping':
             return 'pong'
             
+        # Handle help command
+        if message.strip() == '!po help':
+            return """🎲 *PokerPal Commands* 🎲
+
+!po <buy-in> <players-count> <winner>
+  - Records a poker game result
+  - <buy-in>: Amount each player paid (e.g., 400)
+  - <players-count>: Number of players (e.g., 5)
+  - <winner>: Winner's name (e.g., Tuyen)
+
+Example:
+  !po 400 5 Tuyen
+  → Records: $400 buy-in, 5 players, TUYEN won
+  → Total pool: $2000 (400 × 5)
+
+Other Commands:
+  !ping - Check if bot is alive
+  !po help - Show this help message
+
+Note: Winner names are automatically converted to uppercase."""
+            
         # Handle poker command
         parsed = self.parse_command(message)
         if not parsed:
-            return None
+            return "❌ Invalid command format. Use '!po help' to see the correct usage."
             
         # Send immediate acknowledgment
         self.send_message("Processing your poker command... 🎲")
