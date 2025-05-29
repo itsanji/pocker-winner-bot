@@ -1,6 +1,18 @@
-rocketchat_API==1.30.0
-google-api-python-client==2.108.0
-google-auth-httplib2==0.1.1
-google-auth-oauthlib==1.1.0
-python-dotenv==1.0.0
-websocket-client==1.6.4 
+# Core dependencies
+python-dotenv>=1.0.0
+google-api-python-client>=2.0.0
+google-auth-httplib2>=0.1.0
+google-auth-oauthlib>=1.0.0
+
+# Rocket Chat bot dependencies
+rocketchat-API>=1.30.0
+websocket-client>=1.6.0
+
+# Discord bot dependencies
+discord.py>=2.3.0
+
+# Date and time handling
+pytz>=2024.1
+
+# Logging and error handling
+requests>=2.31.0 
