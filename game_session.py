@@ -13,11 +13,13 @@ class GameSession:
         self.game_count = 1  # Start from game #1
         self.total_winnings = {}  # Track total winnings per player
         self.player_join_game = {}  # Track which game number each player joined at
+        self.player_leave_game = {}  # Track which game number each player left at
         
-        # Initialize total_winnings and join game number for all players
+        # Initialize tracking data for all players
         for player in players:
             self.total_winnings[player] = 0
             self.player_join_game[player] = 1  # Initial players joined at game 1
+            self.player_leave_game[player] = None  # None means still active
             # Record initial joins
             self.add_event("JOIN", player, "Initial", buy_in)
     
@@ -31,8 +33,9 @@ class GameSession:
             return False, f"❌ {player} is already in the game"
             
         self.active_players[player] = self.buy_in
-        self.total_winnings[player] = 0
+        self.total_winnings[player] = self.total_winnings.get(player, 0)  # Keep old winnings if they had any
         self.player_join_game[player] = self.game_count  # Track when this player joined
+        self.player_leave_game[player] = None  # Reset leave game if they're rejoining
         self.add_event("IN", player, "Joined", self.buy_in)
         
         total_prize = len(self.active_players) * self.buy_in
@@ -44,8 +47,11 @@ class GameSession:
             return False, f"❌ {player} is not in the game"
             
         stack = self.active_players.pop(player)
+        self.player_leave_game[player] = self.game_count  # Track when they left
         self.add_event("OUT", player, "Left", stack)
-        return True, f"👋 {player} left the game with ${stack}"
+        
+        total_prize = len(self.active_players) * self.buy_in
+        return True, f"👋 {player} left the game with ${stack}\n💰 New prize pool: ${total_prize}"
     
     def set_winner(self, winner: str) -> Tuple[bool, str]:
         """Set the winner for the current game and automatically start next game"""
@@ -76,8 +82,19 @@ class GameSession:
         
         message.append(f"\n🎲 Game #{self.game_count} has started automatically!")
         message.append(f"💵 All players reset to ${self.buy_in}")
+        message.append(f"👥 Active players: {', '.join(self.active_players.keys())}")
         
         return True, "\n".join(message)
+    
+    def get_player_games_played(self, player: str) -> int:
+        """Calculate actual number of games played by a player"""
+        join_game = self.player_join_game.get(player, self.game_count)
+        leave_game = self.player_leave_game.get(player)
+        
+        if leave_game is None:  # Player is still active
+            return self.game_count - join_game
+        else:  # Player has left
+            return leave_game - join_game
     
     def get_player_pnl(self, player: str = None) -> Tuple[bool, str]:
         """Calculate profit/loss for one or all players"""
@@ -90,17 +107,23 @@ class GameSession:
             "─" * 30
         ]
         
-        for p in self.total_winnings:
+        # Get all players who have ever been in the game
+        all_players = set(self.player_join_game.keys())
+        
+        for p in all_players:
             if player and p != player:
                 continue
                 
-            # Calculate total buy-in based on when player joined
-            games_played = self.game_count - self.player_join_game[p]
+            # Calculate games played and buy-in based on join/leave times
+            games_played = self.get_player_games_played(p)
             total_buyin = self.buy_in * games_played
             winnings = self.total_winnings.get(p, 0)
             pnl = winnings - total_buyin
             
-            results.append(f"{p}:")
+            # Add status indicator for active/inactive players
+            status = "🟢" if p in self.active_players else "⭕"
+            
+            results.append(f"{status} {p}:")
             results.append(f"  Games Played: {games_played}")
             results.append(f"  Total Buy-in: ${total_buyin}")
             results.append(f"  Total Won: ${winnings}")
@@ -154,6 +177,7 @@ class GameSession:
             f"Current Game: #{self.game_count}",
             f"Active Players: {len(self.active_players)}",
             f"Prize Pool: ${len(self.active_players) * self.buy_in}",
+            f"Players: {', '.join(self.active_players.keys())}",
             "─" * 40
         ]
         

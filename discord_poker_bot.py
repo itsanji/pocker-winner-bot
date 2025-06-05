@@ -375,7 +375,7 @@ class Commands(commands.Cog):
                         ["Date", info["Date"]],
                         ["Buy-in Amount", info["Buy-in Amount"]],
                         ["Initial Players", info["Initial Players"]],
-                        ["Final Winner", info["Final Winner"]],
+                        ["Current Game", info["Current Game"]],
                         ["Total Pool", info["Total Pool"]]
                     ]
                 }
