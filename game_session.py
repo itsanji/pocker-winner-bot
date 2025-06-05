@@ -14,12 +14,14 @@ class GameSession:
         self.total_winnings = {}  # Track total winnings per player
         self.player_join_game = {}  # Track which game number each player joined at
         self.player_leave_game = {}  # Track which game number each player left at
+        self.win_counts = {}  # Track number of wins per player
         
         # Initialize tracking data for all players
         for player in players:
             self.total_winnings[player] = 0
             self.player_join_game[player] = 1  # Initial players joined at game 1
             self.player_leave_game[player] = None  # None means still active
+            self.win_counts[player] = 0  # Initialize win count
             # Record initial joins
             self.add_event("JOIN", player, "Initial", buy_in)
     
@@ -36,6 +38,7 @@ class GameSession:
         self.total_winnings[player] = self.total_winnings.get(player, 0)  # Keep old winnings if they had any
         self.player_join_game[player] = self.game_count  # Track when this player joined
         self.player_leave_game[player] = None  # Reset leave game if they're rejoining
+        self.win_counts[player] = self.win_counts.get(player, 0)  # Keep old win count if they had any
         self.add_event("IN", player, "Joined", self.buy_in)
         
         total_prize = len(self.active_players) * self.buy_in
@@ -60,8 +63,9 @@ class GameSession:
             
         total_pool = len(self.active_players) * self.buy_in
         
-        # Update winner's total winnings
+        # Update winner's total winnings and win count
         self.total_winnings[winner] = self.total_winnings.get(winner, 0) + total_pool
+        self.win_counts[winner] = self.win_counts.get(winner, 0) + 1
         
         # Record win event
         self.add_event("WIN", winner, f"Won Game #{self.game_count}", total_pool)
@@ -69,7 +73,8 @@ class GameSession:
         # Prepare message
         message = [
             f"🏆 {winner} won Game #{self.game_count}!",
-            f"💰 Prize pool: ${total_pool}"
+            f"💰 Prize pool: ${total_pool}",
+            f"👑 Wins: {self.win_counts[winner]}"
         ]
         
         # Automatically start next game
@@ -119,12 +124,14 @@ class GameSession:
             total_buyin = self.buy_in * games_played
             winnings = self.total_winnings.get(p, 0)
             pnl = winnings - total_buyin
+            wins = self.win_counts.get(p, 0)
             
             # Add status indicator for active/inactive players
             status = "🟢" if p in self.active_players else "⭕"
             
             results.append(f"{status} {p}:")
             results.append(f"  Games Played: {games_played}")
+            results.append(f"  Games Won: {wins}")
             results.append(f"  Total Buy-in: ${total_buyin}")
             results.append(f"  Total Won: ${winnings}")
             results.append(f"  Net P/L: {'+$' + str(pnl) if pnl > 0 else '-$' + str(abs(pnl)) if pnl < 0 else '$0'}")
@@ -191,7 +198,8 @@ class GameSession:
             elif event_type == "OUT":
                 event_lines.append(f"❌ {player} left the game")
             elif event_type == "WIN":
-                event_lines.append(f"🏆 {player} {action} with ${stack}")
+                wins = self.win_counts.get(player, 0)
+                event_lines.append(f"🏆 {player} {action} with ${stack} (Win #{wins})")
             elif event_type == "NEWGAME":
                 event_lines.append(f"🎲 {action} started - All players reset to ${stack}")
                 

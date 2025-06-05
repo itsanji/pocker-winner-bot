@@ -281,6 +281,9 @@ class Commands(commands.Cog):
             
             self.logger.info(f"Creating new sheet: {sheet_name}")
             
+            # Store the sheet name in the session for later use
+            session.sheet_name = sheet_name
+            
             # Create new sheet
             request = {
                 'requests': [{
@@ -308,7 +311,7 @@ class Commands(commands.Cog):
             self.logger.info("Adding session info")
             self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
-                range=f"{sheet_name}!A1:B5",
+                range=f"{sheet_name}!A1:B6",
                 valueInputOption='RAW',
                 body={
                     'values': [
@@ -316,6 +319,7 @@ class Commands(commands.Cog):
                         ["Buy-in Amount", info["Buy-in Amount"]],
                         ["Initial Players", info["Initial Players"]],
                         ["Current Game", info["Current Game"]],
+                        ["Active Players", len(session.active_players)],
                         ["Total Pool", info["Total Pool"]]
                     ]
                 }
@@ -325,7 +329,7 @@ class Commands(commands.Cog):
             self.logger.info("Adding tracking headers")
             self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
-                range=f"{sheet_name}!A7:E7",
+                range=f"{sheet_name}!A8:E8",
                 valueInputOption='RAW',
                 body={
                     'values': [["Date", "Event Type", "Player Name", "Action", "Current Stack"]]
@@ -338,7 +342,7 @@ class Commands(commands.Cog):
                 self.logger.info("Adding initial tracking data")
                 self.sheets_service.spreadsheets().values().append(
                     spreadsheetId=self.spreadsheet_id,
-                    range=f"{sheet_name}!A8:E8",
+                    range=f"{sheet_name}!A9:E9",
                     valueInputOption='RAW',
                     insertDataOption='INSERT_ROWS',
                     body={'values': tracking_data}
@@ -362,13 +366,17 @@ class Commands(commands.Cog):
     async def update_session_sheet(self, ctx: commands.Context, session: GameSession):
         """Update the session sheet with new events"""
         try:
-            sheet_name = f"Session_{session.date}"
+            # Use the stored sheet name from session creation
+            if not hasattr(session, 'sheet_name'):
+                raise Exception("Sheet name not found in session")
+                
+            sheet_name = session.sheet_name
             
             # Update session info
             info = session.get_session_info()
             self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
-                range=f"{sheet_name}!A1:B5",
+                range=f"{sheet_name}!A1:B6",
                 valueInputOption='RAW',
                 body={
                     'values': [
@@ -376,17 +384,24 @@ class Commands(commands.Cog):
                         ["Buy-in Amount", info["Buy-in Amount"]],
                         ["Initial Players", info["Initial Players"]],
                         ["Current Game", info["Current Game"]],
+                        ["Active Players", len(session.active_players)],
                         ["Total Pool", info["Total Pool"]]
                     ]
                 }
             ).execute()
             
-            # Append new tracking data
+            # Update tracking data - clear existing data first
+            self.sheets_service.spreadsheets().values().clear(
+                spreadsheetId=self.spreadsheet_id,
+                range=f"{sheet_name}!A9:E1000"
+            ).execute()
+            
+            # Then add all tracking data
             tracking_data = session.get_tracking_data()
             if tracking_data:
                 self.sheets_service.spreadsheets().values().update(
                     spreadsheetId=self.spreadsheet_id,
-                    range=f"{sheet_name}!A8:E{7+len(tracking_data)}",
+                    range=f"{sheet_name}!A9:E{8+len(tracking_data)}",
                     valueInputOption='RAW',
                     body={'values': tracking_data}
                 ).execute()
