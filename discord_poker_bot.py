@@ -126,11 +126,15 @@ class Commands(commands.Cog):
                     await ctx.send("❌ No valid players provided. Format: !po start <buy-in> <player1,player2,...>")
                     return
                     
+                # If there's an active session, end it first
                 if channel_id in self.bot.active_sessions:
-                    await ctx.send("❌ A game session is already active in this channel!")
-                    return
+                    old_session = self.bot.active_sessions[channel_id]
+                    success, message = old_session.get_player_pnl()
+                    if success:
+                        await ctx.send("📊 **Final Results of Previous Session:**\n" + message)
+                    del self.bot.active_sessions[channel_id]
                     
-                # Create session
+                # Create new session
                 session = GameSession(buy_in, players)
                 self.bot.active_sessions[channel_id] = session
                 
@@ -230,16 +234,24 @@ class Commands(commands.Cog):
             success, message = session.get_player_pnl(player_name)
             await ctx.send(message)
             
+        elif command == 'end':
+            success, message = session.get_player_pnl()
+            if success:
+                await ctx.send("📊 **Final Session Results:**\n" + message)
+            del self.bot.active_sessions[channel_id]
+            await ctx.send("👋 Session ended!")
+            
     async def send_help(self, ctx: commands.Context):
         """Send help message"""
         help_text = """
 🎮 **Poker Manager Bot Commands**
 
 **Game Session Commands:**
-`!po start <buy-in> <player1,player2,...>` - Start new session
+`!po start <buy-in> <player1,player2,...>` - Start new session (ends current session if exists)
 `!po in <player>` - Add player to session
 `!po out <player>` - Remove player from session
 `!po win <player>` - Record game winner (auto-starts next game)
+`!po end` - End current session and show final results
 
 **Information Commands:**
 `!po events` - Show session history
@@ -252,6 +264,7 @@ class Commands(commands.Cog):
 !po win Tuyen
 !po in Hung
 !po pnl
+!po end
 ```
 """
         await ctx.send(help_text)
