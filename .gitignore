@@ -3,3 +3,4 @@ logs
 .env
 service-account.json
 discord_bot.pid
+__pycache__/
