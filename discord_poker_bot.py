@@ -297,24 +297,190 @@ class Commands(commands.Cog):
             # Store the sheet name in the session for later use
             session.sheet_name = sheet_name
             
-            # Create new sheet
+            # Create new sheet with formatting
             request = {
-                'requests': [{
-                    'addSheet': {
-                        'properties': {
-                            'title': sheet_name,
-                            'gridProperties': {
-                                'rowCount': 1000,
-                                'columnCount': 26  # Increased for more players
+                'requests': [
+                    {
+                        'addSheet': {
+                            'properties': {
+                                'title': sheet_name,
+                                'gridProperties': {
+                                    'rowCount': 200,
+                                    'columnCount': 26  # Increased for more players
+                                }
+                            }
+                        }
+                    },
+                    # Hide gridlines
+                    {
+                        'updateSheetProperties': {
+                            'properties': {
+                                'sheetId': None,  # Will be filled after sheet creation
+                                'gridProperties': {
+                                    'hideGridlines': True
+                                }
+                            },
+                            'fields': 'gridProperties.hideGridlines'
+                        }
+                    }
+                ]
+            }
+            
+            # Create the sheet first
+            response = self.sheets_service.spreadsheets().batchUpdate(
+                spreadsheetId=self.spreadsheet_id,
+                body=request
+            ).execute()
+            
+            # Get the new sheet ID
+            new_sheet_id = None
+            for reply in response.get('replies', []):
+                if 'addSheet' in reply:
+                    new_sheet_id = reply['addSheet']['properties']['sheetId']
+                    break
+            
+            if new_sheet_id is None:
+                raise Exception("Failed to get new sheet ID")
+            
+            # Apply formatting
+            format_request = {
+                'requests': [
+                    # Format header section
+                    {
+                        'repeatCell': {
+                            'range': {
+                                'sheetId': new_sheet_id,
+                                'startRowIndex': 0,
+                                'endRowIndex': 2,
+                                'startColumnIndex': 0,
+                                'endColumnIndex': 2
+                            },
+                            'cell': {
+                                'userEnteredFormat': {
+                                    'backgroundColor': {
+                                        'red': 0.95,
+                                        'green': 0.95,
+                                        'blue': 0.95
+                                    },
+                                    'textFormat': {
+                                        'bold': True
+                                    }
+                                }
+                            },
+                            'fields': 'userEnteredFormat(backgroundColor,textFormat)'
+                        }
+                    },
+                    # Format player stats header
+                    {
+                        'repeatCell': {
+                            'range': {
+                                'sheetId': new_sheet_id,
+                                'startRowIndex': 2,
+                                'endRowIndex': 3,
+                                'startColumnIndex': 0,
+                                'endColumnIndex': 26
+                            },
+                            'cell': {
+                                'userEnteredFormat': {
+                                    'backgroundColor': {
+                                        'red': 0.8,
+                                        'green': 0.8,
+                                        'blue': 0.95
+                                    },
+                                    'textFormat': {
+                                        'bold': True
+                                    }
+                                }
+                            },
+                            'fields': 'userEnteredFormat(backgroundColor,textFormat)'
+                        }
+                    },
+                    # Format player stats rows
+                    {
+                        'repeatCell': {
+                            'range': {
+                                'sheetId': new_sheet_id,
+                                'startRowIndex': 3,
+                                'endRowIndex': 7,
+                                'startColumnIndex': 0,
+                                'endColumnIndex': 26
+                            },
+                            'cell': {
+                                'userEnteredFormat': {
+                                    'backgroundColor': {
+                                        'red': 0.95,
+                                        'green': 0.95,
+                                        'blue': 1.0
+                                    }
+                                }
+                            },
+                            'fields': 'userEnteredFormat(backgroundColor)'
+                        }
+                    },
+                    # Format events header
+                    {
+                        'repeatCell': {
+                            'range': {
+                                'sheetId': new_sheet_id,
+                                'startRowIndex': 8,
+                                'endRowIndex': 9,
+                                'startColumnIndex': 0,
+                                'endColumnIndex': 5
+                            },
+                            'cell': {
+                                'userEnteredFormat': {
+                                    'backgroundColor': {
+                                        'red': 0.8,
+                                        'green': 0.9,
+                                        'blue': 0.8
+                                    },
+                                    'textFormat': {
+                                        'bold': True
+                                    }
+                                }
+                            },
+                            'fields': 'userEnteredFormat(backgroundColor,textFormat)'
+                        }
+                    },
+                    # Add borders around player stats
+                    {
+                        'updateBorders': {
+                            'range': {
+                                'sheetId': new_sheet_id,
+                                'startRowIndex': 2,
+                                'endRowIndex': 7,
+                                'startColumnIndex': 0,
+                                'endColumnIndex': 26
+                            },
+                            'top': {
+                                'style': 'SOLID',
+                                'width': 1,
+                                'color': {'red': 0.7, 'green': 0.7, 'blue': 0.7}
+                            },
+                            'bottom': {
+                                'style': 'SOLID',
+                                'width': 1,
+                                'color': {'red': 0.7, 'green': 0.7, 'blue': 0.7}
+                            },
+                            'left': {
+                                'style': 'SOLID',
+                                'width': 1,
+                                'color': {'red': 0.7, 'green': 0.7, 'blue': 0.7}
+                            },
+                            'right': {
+                                'style': 'SOLID',
+                                'width': 1,
+                                'color': {'red': 0.7, 'green': 0.7, 'blue': 0.7}
                             }
                         }
                     }
-                }]
+                ]
             }
             
+            # Apply formatting
             self.sheets_service.spreadsheets().batchUpdate(
                 spreadsheetId=self.spreadsheet_id,
-                body=request
+                body=format_request
             ).execute()
             
             self.logger.info(f"Successfully created sheet: {sheet_name}")
@@ -340,7 +506,7 @@ class Commands(commands.Cog):
             self.logger.info("Adding tracking headers")
             self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
-                range=f"{sheet_name}!A8:E8",
+                range=f"{sheet_name}!A9:E9",
                 valueInputOption='RAW',
                 body={
                     'values': [["Date", "Event Type", "Player Name", "Action", "Current Stack"]]
@@ -353,7 +519,7 @@ class Commands(commands.Cog):
                 self.logger.info("Adding initial tracking data")
                 self.sheets_service.spreadsheets().values().append(
                     spreadsheetId=self.spreadsheet_id,
-                    range=f"{sheet_name}!A9:E9",
+                    range=f"{sheet_name}!A10:E10",
                     valueInputOption='RAW',
                     insertDataOption='INSERT_ROWS',
                     body={'values': tracking_data}
@@ -438,7 +604,7 @@ class Commands(commands.Cog):
             # Update tracking data - clear existing data first
             self.sheets_service.spreadsheets().values().clear(
                 spreadsheetId=self.spreadsheet_id,
-                range=f"{sheet_name}!A9:E1000"
+                range=f"{sheet_name}!A10:E1000"
             ).execute()
             
             # Then add all tracking data
@@ -446,7 +612,7 @@ class Commands(commands.Cog):
             if tracking_data:
                 self.sheets_service.spreadsheets().values().update(
                     spreadsheetId=self.spreadsheet_id,
-                    range=f"{sheet_name}!A9:E{8+len(tracking_data)}",
+                    range=f"{sheet_name}!A10:E{9+len(tracking_data)}",
                     valueInputOption='RAW',
                     body={'values': tracking_data}
                 ).execute()
