@@ -305,7 +305,7 @@ class Commands(commands.Cog):
                             'title': sheet_name,
                             'gridProperties': {
                                 'rowCount': 1000,
-                                'columnCount': 7
+                                'columnCount': 26  # Increased for more players
                             }
                         }
                     }
@@ -320,25 +320,23 @@ class Commands(commands.Cog):
             self.logger.info(f"Successfully created sheet: {sheet_name}")
             
             # Add session info
-            info = session.get_session_info()
             self.logger.info("Adding session info")
             self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
-                range=f"{sheet_name}!A1:B6",
+                range=f"{sheet_name}!A1:B2",
                 valueInputOption='RAW',
                 body={
                     'values': [
-                        ["Date", info["Date"]],
-                        ["Buy-in Amount", info["Buy-in Amount"]],
-                        ["Initial Players", info["Initial Players"]],
-                        ["Current Game", info["Current Game"]],
-                        ["Active Players", len(session.active_players)],
-                        ["Total Pool", info["Total Pool"]]
+                        ["Date", session.date],
+                        ["Buy-in Amount", session.buy_in]
                     ]
                 }
             ).execute()
             
-            # Add player tracking headers
+            # Add player stats header and initial data
+            self.update_player_stats(session, sheet_name)
+            
+            # Add event tracking headers
             self.logger.info("Adding tracking headers")
             self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
@@ -376,6 +374,55 @@ class Commands(commands.Cog):
                 await ctx.send("❌ Error creating game sheet. Please check bot permissions and spreadsheet settings.")
             raise
 
+    def update_player_stats(self, session: GameSession, sheet_name: str):
+        """Update the player statistics section in columns"""
+        # Get all players who have ever been in the game
+        all_players = sorted(list(set(session.player_join_game.keys())))
+        
+        # Create column headers (player names)
+        headers = ["Games in Session", ""] + all_players
+        
+        # Create rows for each stat
+        games_played = ["Games Played", session.game_count - 1]
+        games_won = ["Games Won", ""]
+        total_buyin = ["Total Buy-in", ""]
+        net_pnl = ["Net P/L", ""]
+        
+        # Fill in stats for each player
+        for player in all_players:
+            # Games played by this player
+            played = session.get_player_games_played(player)
+            games_played.append(played)
+            
+            # Games won by this player
+            won = session.win_counts.get(player, 0)
+            games_won.append(won)
+            
+            # Total buy-in for this player
+            buyin = session.buy_in * played
+            total_buyin.append(buyin)
+            
+            # Net P/L for this player
+            winnings = session.total_winnings.get(player, 0)
+            pnl = winnings - buyin
+            net_pnl.append(pnl)
+        
+        # Update the sheet
+        self.sheets_service.spreadsheets().values().update(
+            spreadsheetId=self.spreadsheet_id,
+            range=f"{sheet_name}!A3:Z7",
+            valueInputOption='RAW',
+            body={
+                'values': [
+                    headers,
+                    games_played,
+                    games_won,
+                    total_buyin,
+                    net_pnl
+                ]
+            }
+        ).execute()
+
     async def update_session_sheet(self, ctx: commands.Context, session: GameSession):
         """Update the session sheet with new events"""
         try:
@@ -385,23 +432,8 @@ class Commands(commands.Cog):
                 
             sheet_name = session.sheet_name
             
-            # Update session info
-            info = session.get_session_info()
-            self.sheets_service.spreadsheets().values().update(
-                spreadsheetId=self.spreadsheet_id,
-                range=f"{sheet_name}!A1:B6",
-                valueInputOption='RAW',
-                body={
-                    'values': [
-                        ["Date", info["Date"]],
-                        ["Buy-in Amount", info["Buy-in Amount"]],
-                        ["Initial Players", info["Initial Players"]],
-                        ["Current Game", info["Current Game"]],
-                        ["Active Players", len(session.active_players)],
-                        ["Total Pool", info["Total Pool"]]
-                    ]
-                }
-            ).execute()
+            # Update player stats
+            self.update_player_stats(session, sheet_name)
             
             # Update tracking data - clear existing data first
             self.sheets_service.spreadsheets().values().clear(
